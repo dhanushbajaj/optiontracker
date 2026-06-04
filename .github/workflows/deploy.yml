@@ -41,7 +41,11 @@ jobs:
       - name: Build
         env:
           VITE_VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
-        run: npm run build
+        run: |
+          REPO="${GITHUB_REPOSITORY#*/}"
+          if [[ "$REPO" == *.github.io ]]; then BASE="/"; else BASE="/$REPO/"; fi
+          echo "Building with base $BASE"
+          VITE_BASE="$BASE" npm run build
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:
