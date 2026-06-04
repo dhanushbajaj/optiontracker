@@ -1,0 +1,61 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    background-image: radial-gradient(
+        1200px 600px at 80% -10%,
+        rgba(56, 189, 248, 0.06),
+        transparent
+      ),
+      radial-gradient(900px 500px at -10% 10%, rgba(34, 197, 94, 0.05), transparent);
+    background-attachment: fixed;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-line rounded-full;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-line rounded-2xl shadow-card;
+  }
+  .card-pad {
+    @apply p-4 sm:p-5;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+  .stat-label {
+    @apply text-[11px] uppercase tracking-wider text-ink-dim font-semibold;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .section-title {
+    @apply text-sm font-semibold text-ink flex items-center gap-2;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold
+      border border-line bg-bg-soft hover:bg-bg-hover transition-colors;
+  }
+  .btn-accent {
+    @apply border-accent/40 bg-accent/10 text-accent hover:bg-accent/20;
+  }
+}

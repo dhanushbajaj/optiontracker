@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173/ -o /dev/null -w \"HTTP %{http_code}\\\\n\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npm install *)",
+      "Bash(npx tsx *)",
+      "Bash(node -e \"const s=require\\('./public/data/last-summary.json'\\); console.log\\(JSON.stringify\\(s.topIdea,null,1\\)\\)\")",
+      "Bash(curl -s http://localhost:5173/ -o /dev/null -w \"root: HTTP %{http_code} %{time_total}s\\\\n\")",
+      "Bash(curl -s http://localhost:5173/data/latest-morning.json -o /dev/null -w \"data: HTTP %{http_code} %{time_total}s\\\\n\")",
+      "Bash(curl -s http://localhost:5173/src/main.tsx -o /dev/null -w \"main: HTTP %{http_code} %{time_total}s\\\\n\")",
+      "Bash(curl -s http://localhost:5180/ -o /dev/null -w \"5180 root: HTTP %{http_code}\\\\n\")",
+      "PowerShell($procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' }; foreach \\($p in $procs\\) { try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {} }; \"killed node processes: $\\($procs.Count\\)\")",
+      "Bash(curl -s http://localhost:5173/ -o /dev/null -w \"5173: %{http_code}\\\\n\" --max-time 2)",
+      "Bash(curl -s http://localhost:5180/ -o /dev/null -w \"5180: %{http_code}\\\\n\" --max-time 2)"
+    ]
+  }
+}

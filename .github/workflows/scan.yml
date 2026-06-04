@@ -1,0 +1,95 @@
+name: Scheduled Market Scan
+
+# The serverless "backend": runs the 9 AM / 9 PM scans, sends notifications,
+# tracks recommendation outcomes, commits the fresh reports (the file-based DB),
+# and redeploys the site so your phone sees the update.
+#
+# Cron is UTC and does NOT follow US daylight-saving. The times below target
+# Eastern Daylight Time (EDT). During EST they fire ~1h earlier (8 AM / 8 PM ET);
+# the runner auto-classifies morning vs evening from the actual ET hour.
+
+on:
+  schedule:
+    - cron: "0 13 * * 1-5" # ~09:00 ET — morning prep (weekdays)
+    - cron: "0 1 * * 2-6" # ~21:00 ET prev day — evening recap (weekday evenings)
+  workflow_dispatch:
+    inputs:
+      session:
+        description: "Which scan to run"
+        type: choice
+        options: [auto, morning, evening]
+        default: auto
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    outputs: {}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Run market scan
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: npm run scan -- --session=${{ github.event.inputs.session || 'auto' }}
+
+      - name: Track recommendation outcomes
+        continue-on-error: true
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: npm run track-outcomes
+
+      - name: Send notifications (email + web push)
+        continue-on-error: true
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+        run: npm run notify
+
+      - name: Commit fresh reports
+        run: |
+          git config user.name "oracle-bot"
+          git config user.email "actions@github.com"
+          git add public/data
+          git diff --staged --quiet || git commit -m "data: scheduled scan $(date -u +%FT%TZ)"
+          git push
+
+      - name: Build
+        env:
+          VITE_VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+        run: npm run build
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: scan
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

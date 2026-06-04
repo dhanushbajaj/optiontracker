@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+# Builds the static app and publishes it to GitHub Pages.
+# Runs on code pushes (ignoring data-only commits made by the scan job, which
+# deploys itself) and can be triggered manually.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "public/data/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Refresh live data so the first deploy isn't empty (non-fatal).
+      - name: Generate latest reports
+        continue-on-error: true
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: |
+          npm run scan -- --session=morning
+          npm run scan -- --session=evening
+      - name: Build
+        env:
+          VITE_VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+        run: npm run build
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

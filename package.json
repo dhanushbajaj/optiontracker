@@ -1,0 +1,38 @@
+{
+  "name": "option-oracle",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "AI-powered stock market & options trading assistant with 9AM/9PM market scans, conviction scoring, and structured trade ideas.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "scan": "tsx scripts/runScan.ts",
+    "scan:morning": "tsx scripts/runScan.ts --session=morning",
+    "scan:evening": "tsx scripts/runScan.ts --session=evening",
+    "notify": "tsx scripts/notify.ts",
+    "track-outcomes": "tsx scripts/trackOutcomes.ts"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/nodemailer": "^6.4.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "nodemailer": "^6.9.14",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.7",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "web-push": "^3.6.7"
+  }
+}
