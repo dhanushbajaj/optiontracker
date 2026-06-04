@@ -118,6 +118,7 @@ export class FinnhubProvider implements MarketDataProvider {
           name: m.name,
           value: round(q.c),
           changePct: round(chg),
+          proxyOf: m.symbol, // value is the ETF price, not the real index level
         });
       }
     }

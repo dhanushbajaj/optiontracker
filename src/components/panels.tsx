@@ -27,13 +27,14 @@ export function MarketOverview({ snap }: { snap: MarketSnapshot }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-2">
-        <MacroTile label="VIX" value={snap.vix.toFixed(2)} change={snap.vixChangePct} invert />
+        <MacroTile label="VIX" value={snap.vix.toFixed(2)} change={snap.vixChangePct} />
         {snap.macro.map((m) => (
           <MacroTile
             key={m.symbol}
             label={m.symbol}
             value={(m.unit === "$" ? "$" : "") + m.value.toLocaleString() + (m.unit === "%" ? "%" : "")}
             change={m.changePct}
+            proxyOf={m.proxyOf}
           />
         ))}
       </div>
@@ -51,12 +52,33 @@ export function MarketOverview({ snap }: { snap: MarketSnapshot }) {
   );
 }
 
-function MacroTile({ label, value, change, invert }: { label: string; value: string; change: number; invert?: boolean }) {
+function MacroTile({
+  label,
+  value,
+  change,
+  proxyOf,
+}: {
+  label: string;
+  value: string;
+  change: number;
+  proxyOf?: string;
+}) {
   return (
     <div className="rounded-lg bg-bg-soft border border-line px-2.5 py-2">
       <div className="text-[10px] text-ink-dim font-semibold">{label}</div>
-      <div className="tabular text-sm font-semibold">{value}</div>
-      <Delta value={change} className="text-[10px]" />
+      {proxyOf ? (
+        // Proxy: the absolute is an ETF price, not the real index level — lead
+        // with the directional move and note the proxy ticker.
+        <>
+          <Delta value={change} className="text-sm" />
+          <div className="text-[9px] text-ink-dim mt-0.5">via {proxyOf}</div>
+        </>
+      ) : (
+        <>
+          <div className="tabular text-sm font-semibold">{value}</div>
+          <Delta value={change} className="text-[10px]" />
+        </>
+      )}
     </div>
   );
 }

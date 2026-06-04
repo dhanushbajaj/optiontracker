@@ -14,7 +14,11 @@
       "Bash(curl -s http://localhost:5180/ -o /dev/null -w \"5180 root: HTTP %{http_code}\\\\n\")",
       "PowerShell($procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' }; foreach \\($p in $procs\\) { try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {} }; \"killed node processes: $\\($procs.Count\\)\")",
       "Bash(curl -s http://localhost:5173/ -o /dev/null -w \"5173: %{http_code}\\\\n\" --max-time 2)",
-      "Bash(curl -s http://localhost:5180/ -o /dev/null -w \"5180: %{http_code}\\\\n\" --max-time 2)"
+      "Bash(curl -s http://localhost:5180/ -o /dev/null -w \"5180: %{http_code}\\\\n\" --max-time 2)",
+      "Bash(grep -v \"^$\")",
+      "Bash(FINNHUB_API_KEY=\"d8gfin1r01qlgcuj6vg0d8gfin1r01qlgcuj6vgg\" npx tsx scripts/runScan.ts --session=morning)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const m=require\\('./public/data/latest-morning.json'\\); console.log\\('macro sample:', JSON.stringify\\(m.scan.snapshot.macro[0]\\)\\)\")"
     ]
   }
 }

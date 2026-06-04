@@ -80,6 +80,7 @@ export interface MacroQuote {
   value: number;
   changePct: number;
   unit?: string;
+  proxyOf?: string; // set when value is an ETF proxy (e.g. TLT for US10Y)
 }
 
 export interface SectorPerf {
