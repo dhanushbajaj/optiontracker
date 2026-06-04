@@ -4,3 +4,7 @@ dist-ssr
 *.local
 .DS_Store
 .vite
+# tsc -b emit artifacts (no longer emitted, but keep ignored)
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo

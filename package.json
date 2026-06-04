@@ -6,7 +6,7 @@
   "description": "AI-powered stock market & options trading assistant with 9AM/9PM market scans, conviction scoring, and structured trade ideas.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "scan": "tsx scripts/runScan.ts",
