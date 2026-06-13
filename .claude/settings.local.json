@@ -18,7 +18,9 @@
       "Bash(grep -v \"^$\")",
       "Bash(FINNHUB_API_KEY=\"d8gfin1r01qlgcuj6vg0d8gfin1r01qlgcuj6vgg\" npx tsx scripts/runScan.ts --session=morning)",
       "Bash(node -e ' *)",
-      "Bash(node -e \"const m=require\\('./public/data/latest-morning.json'\\); console.log\\('macro sample:', JSON.stringify\\(m.scan.snapshot.macro[0]\\)\\)\")"
+      "Bash(node -e \"const m=require\\('./public/data/latest-morning.json'\\); console.log\\('macro sample:', JSON.stringify\\(m.scan.snapshot.macro[0]\\)\\)\")",
+      "Bash(VITE_BASE=\"/option-tracker/\" npm run build)",
+      "Bash(git add *)"
     ]
   }
 }

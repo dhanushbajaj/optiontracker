@@ -37,6 +37,16 @@ shipped to the browser**. The browser only reads the committed JSON reports.
 chains, IV and flow are **modeled** (no free options data — swap in Polygon/Tradier for
 real chains via the same interface). The app labels this in **Alerts & Setup → Data & Status**.
 
+### Charts & on-demand live refresh
+- **Interactive charts** — TradingView widgets (no key) provide real candlestick charts on
+  the dashboard (SPY/QQQ + the top-idea ticker) and a searchable full **Charts** page.
+- **In-browser live mode (optional)** — paste your Finnhub key in **Alerts & Setup → Live
+  Data Key** and the **↻ refresh** button runs a real live scan straight from the browser
+  (key stored only in your browser's localStorage). Without it, the app reads the
+  twice-daily reports the cron commits and makes **zero** API calls from your device.
+  > Finnhub free tier is **60 requests/min**; one full scan is ~50 calls, so refresh
+  > occasionally rather than spamming it. The scheduled cron never hits this.
+
 ### Working today
 - **Two daily scans** — 9 AM Prep / 9 PM Recap, toggleable in the header, each producing a
   full structured report.

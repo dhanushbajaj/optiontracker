@@ -4,16 +4,18 @@ import { MarketOverview, SentimentPanel, MoversPanel, SectorPanel, NewsPanel, An
 import { OptionsFlowPanel, EarningsPanel, WatchlistView, SavedView, JournalView } from "./components/features";
 import { ReportView } from "./components/ReportView";
 import { TradeIdeaCard } from "./components/TradeIdeaCard";
-import { NotificationSetup, DataSourcesCard } from "./components/NotificationSetup";
+import { NotificationSetup, DataSourcesCard, LiveDataKeyCard } from "./components/NotificationSetup";
+import { ChartsView, DashboardCharts } from "./components/ChartsView";
 import { Card } from "./components/ui";
 import { fmtDate, fmtTime } from "./lib/format";
 import type { AppAlert } from "./types";
 
-type View = "dashboard" | "report" | "flow" | "earnings" | "watch" | "saved" | "journal" | "alerts";
+type View = "dashboard" | "report" | "charts" | "flow" | "earnings" | "watch" | "saved" | "journal" | "alerts";
 
 const NAV: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "▦" },
   { id: "report", label: "Daily Report", icon: "📋" },
+  { id: "charts", label: "Charts", icon: "📈" },
   { id: "flow", label: "Options Flow", icon: "🌊" },
   { id: "earnings", label: "Earnings", icon: "📅" },
   { id: "watch", label: "Watchlists", icon: "👁" },
@@ -113,6 +115,7 @@ export default function App() {
             <div className="max-w-6xl mx-auto">
               {view === "dashboard" && <Dashboard />}
               {view === "report" && <ReportView />}
+              {view === "charts" && <ChartsView />}
               {view === "flow" && <OptionsFlowPanel snap={scan.snapshot} full />}
               {view === "earnings" && <EarningsPanel snap={scan.snapshot} />}
               {view === "watch" && <WatchlistView />}
@@ -134,6 +137,7 @@ function Dashboard() {
   return (
     <div className="space-y-4">
       <MarketOverview snap={snap} />
+      <DashboardCharts />
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           {scan.report.topIdea && (
@@ -168,6 +172,7 @@ function AlertsView({ alerts }: { alerts: AppAlert[] }) {
   return (
     <div className="grid lg:grid-cols-2 gap-4">
       <div className="space-y-4">
+        <LiveDataKeyCard />
         <NotificationSetup />
         <DataSourcesCard />
       </div>

@@ -34,11 +34,9 @@ import { UNIVERSE, SECTOR_ETF, INDEX_SYMBOLS, MACRO_PROXIES } from "./universe";
 
 const BASE = "https://finnhub.io/api/v1";
 
-function apiKey(): string {
+function envKey(): string | undefined {
   const env = (globalThis as { process?: { env?: Record<string, string> } }).process?.env;
-  const k = env?.FINNHUB_API_KEY;
-  if (!k) throw new Error("FINNHUB_API_KEY is not set");
-  return k;
+  return env?.FINNHUB_API_KEY;
 }
 
 const round = (n: number, p = 2) => Math.round(n * 10 ** p) / 10 ** p;
@@ -53,17 +51,28 @@ interface FinnhubQuote {
 export class FinnhubProvider implements MarketDataProvider {
   readonly id = "finnhub";
   private gap: number;
+  private token: string;
 
-  // gapMs throttles requests to respect the 60 calls/min free limit.
-  constructor(opts: { gapMs?: number } = {}) {
+  // gapMs throttles requests (free tier ~30 req/s, 60/min). A key may be passed
+  // explicitly (browser / client-side live mode) or read from FINNHUB_API_KEY
+  // (Node / GitHub Action).
+  constructor(opts: { gapMs?: number; apiKey?: string } = {}) {
     this.gap = opts.gapMs ?? 240;
+    const k = opts.apiKey ?? envKey();
+    if (!k) throw new Error("No Finnhub API key (pass apiKey or set FINNHUB_API_KEY)");
+    this.token = k;
   }
 
-  private async get<T>(path: string): Promise<T> {
+  private async get<T>(path: string, attempt = 0): Promise<T> {
     await sleep(this.gap);
     const sep = path.includes("?") ? "&" : "?";
-    const url = `${BASE}${path}${sep}token=${apiKey()}`;
+    const url = `${BASE}${path}${sep}token=${this.token}`;
     const res = await fetch(url);
+    // Back off and retry on rate-limit (free tier is 60/min).
+    if (res.status === 429 && attempt < 2) {
+      await sleep(2000);
+      return this.get<T>(path, attempt + 1);
+    }
     if (!res.ok) throw new Error(`Finnhub ${res.status} for ${path}`);
     return (await res.json()) as T;
   }
@@ -138,12 +147,9 @@ export class FinnhubProvider implements MarketDataProvider {
       }
     }
 
-    // --- Sector ETFs for relative strength ---------------------------------
+    // Sector performance is derived from the universe constituents below
+    // (saves 7 calls to stay under the 60/min free-tier limit).
     const sectorChg: Record<string, number> = {};
-    for (const etf of new Set(Object.values(SECTOR_ETF))) {
-      const q = await this.quote(etf);
-      if (q) sectorChg[etf] = round(q.dp);
-    }
 
     // --- Universe quotes + metrics -> Quote ---------------------------------
     const quotes: Quote[] = [];
@@ -164,7 +170,7 @@ export class FinnhubProvider implements MarketDataProvider {
     const earnings = await this.fetchEarnings(quotes);
 
     // --- Analyst recommendation trends -> actions ---------------------------
-    const analyst = await this.fetchAnalyst(quotes.slice(0, 8));
+    const analyst = await this.fetchAnalyst(quotes.slice(0, 6));
 
     // --- Sectors -----------------------------------------------------------
     const sectors = buildSectors(quotes, sectorChg);
@@ -219,7 +225,7 @@ export class FinnhubProvider implements MarketDataProvider {
     // a few high-interest company headlines
     const from = isoDate(new Date(Date.now() - 2 * 86400000));
     const to = isoDate(new Date());
-    for (const t of ["NVDA", "TSLA", "AAPL", "AMD"]) {
+    for (const t of ["NVDA", "TSLA", "AAPL"]) {
       try {
         const arr = await this.get<RawNews[]>(
           `/company-news?symbol=${t}&from=${from}&to=${to}`

@@ -3,11 +3,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useCallback,
 } from "react";
 import { registerProvider, getProvider } from "./data/provider";
 import { MockProvider } from "./data/mockProvider";
+import { FinnhubProvider } from "./data/finnhubProvider";
 import { runScan, type ScanResult } from "./engines/report";
 import type {
   ReportType,
@@ -35,6 +37,8 @@ interface AppState {
   meta: ScanMeta | null;
   loading: boolean;
   refresh: () => void;
+  liveKey: string;
+  setLiveKey: (k: string) => void;
   watchlist: string[];
   toggleWatch: (t: string) => void;
   saved: SavedIdea[];
@@ -73,6 +77,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [meta, setMeta] = useState<ScanMeta | null>(null);
   const [loading, setLoading] = useState(true);
+  // Optional: a Finnhub key the user pastes in-app for on-demand live scans
+  // straight from the browser. Stored locally only (never sent anywhere but Finnhub).
+  const [liveKey, setLiveKeyState] = useState<string>(() => {
+    try {
+      return localStorage.getItem("oo.finnhubKey") || "";
+    } catch {
+      return "";
+    }
+  });
 
   const [watchlist, setWatchlist] = useState<string[]>(() =>
     load("oo.watch", ["NVDA", "TSLA", "AMD", "SPY"])
@@ -81,39 +94,84 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [journal, setJournal] = useState<JournalEntry[]>(() => load("oo.journal", []));
   const [alerts, setAlerts] = useState<AppAlert[]>([]);
 
+  // Guard against overlapping scans (React StrictMode double-invoke, rapid
+  // session/key changes) — a live scan fires dozens of Finnhub calls and we
+  // must not double them into the rate limit.
+  const scanning = useRef(false);
   const refresh = useCallback(async () => {
+    if (scanning.current) return;
+    scanning.current = true;
     setLoading(true);
-    // 1) Prefer the pre-generated report committed by the scheduled scan.
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}data/latest-${session}.json`, {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const bundle = await res.json();
-        if (bundle?.scan?.report) {
-          setScan(bundle.scan as ScanResult);
-          setMeta(bundle.meta as ScanMeta);
-          setAlerts(buildAlerts(bundle.scan as ScanResult, session));
-          setLoading(false);
+      // 0) If the user supplied a Finnhub key, run a real live scan in-browser.
+      if (liveKey) {
+        try {
+          const provider = new FinnhubProvider({ apiKey: liveKey, gapMs: 300 });
+          const snap = await provider.getSnapshot(session);
+          // If we got starved by the rate limit, the snapshot will be sparse —
+          // fall back to the last good report rather than render a broken one.
+          if (snap.quotes.length < 5 || snap.indices.length < 2) {
+            throw new Error("Live data too sparse (likely rate-limited) — using last report");
+          }
+          const result = runScan(snap, session);
+          setScan(result);
+          setMeta({
+            dataMode: "live",
+            generatedAt: snap.asOf,
+            session,
+            provider: "finnhub (browser)",
+            note: "Live on-demand scan run from your browser with your Finnhub key.",
+          });
+          setAlerts(buildAlerts(result, session));
           return;
+        } catch (e) {
+          console.warn("Live in-browser scan failed, falling back:", e);
         }
       }
-    } catch {
-      /* fall through to local mock */
+      // 1) Prefer the pre-generated report committed by the scheduled scan.
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}data/latest-${session}.json`, {
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const bundle = await res.json();
+          if (bundle?.scan?.report) {
+            setScan(bundle.scan as ScanResult);
+            setMeta(bundle.meta as ScanMeta);
+            setAlerts(buildAlerts(bundle.scan as ScanResult, session));
+            return;
+          }
+        }
+      } catch {
+        /* fall through to local mock */
+      }
+      // 2) Local dev / no data yet: run the engines client-side on mock data.
+      const snap = await getProvider().getSnapshot(session);
+      const result = runScan(snap, session);
+      setScan(result);
+      setMeta({
+        dataMode: "mock",
+        generatedAt: snap.asOf,
+        session,
+        note: "Live report not found — showing sample analysis generated in-browser.",
+      });
+      setAlerts(buildAlerts(result, session));
+    } finally {
+      scanning.current = false;
+      setLoading(false);
     }
-    // 2) Local dev / no data yet: run the engines client-side on mock data.
-    const snap = await getProvider().getSnapshot(session);
-    const result = runScan(snap, session);
-    setScan(result);
-    setMeta({
-      dataMode: "mock",
-      generatedAt: snap.asOf,
-      session,
-      note: "Live report not found — showing sample analysis generated in-browser.",
-    });
-    setAlerts(buildAlerts(result, session));
-    setLoading(false);
-  }, [session]);
+  }, [session, liveKey]);
+
+  const setLiveKey = useCallback((k: string) => {
+    const key = k.trim();
+    try {
+      if (key) localStorage.setItem("oo.finnhubKey", key);
+      else localStorage.removeItem("oo.finnhubKey");
+    } catch {
+      /* ignore */
+    }
+    setLiveKeyState(key);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -170,6 +228,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       meta,
       loading,
       refresh,
+      liveKey,
+      setLiveKey,
       watchlist,
       toggleWatch,
       saved,
@@ -181,7 +241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       alerts,
       dismissAlert,
     }),
-    [session, scan, meta, loading, refresh, watchlist, toggleWatch, saved, saveIdea, removeSaved, journal, addJournal, updateJournal, alerts, dismissAlert]
+    [session, scan, meta, loading, refresh, liveKey, setLiveKey, watchlist, toggleWatch, saved, saveIdea, removeSaved, journal, addJournal, updateJournal, alerts, dismissAlert]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

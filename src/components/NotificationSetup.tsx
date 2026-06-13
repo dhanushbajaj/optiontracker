@@ -109,6 +109,60 @@ export function NotificationSetup() {
   );
 }
 
+export function LiveDataKeyCard() {
+  const { liveKey, setLiveKey, refresh } = useApp();
+  const [draft, setDraft] = useState(liveKey);
+  const [show, setShow] = useState(false);
+  const active = !!liveKey;
+
+  const apply = () => {
+    setLiveKey(draft);
+    refresh();
+  };
+  const clear = () => {
+    setDraft("");
+    setLiveKey("");
+    refresh();
+  };
+
+  return (
+    <Card title="Live Data Key (on-demand)" icon={<span>🔑</span>}>
+      <p className="text-sm text-ink-soft mb-3">
+        Paste your free <a href="https://finnhub.io" target="_blank" rel="noreferrer" className="text-accent hover:underline">Finnhub</a> key
+        to make the <span className="font-semibold">↻ refresh</span> button run a real live scan from your browser.
+        Without it, the app shows the scheduled 9 AM / 9 PM reports (the secure default).
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          type={show ? "text" : "password"}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Finnhub API key"
+          className="flex-1 min-w-[180px] bg-bg-soft border border-line rounded-lg px-3 py-2 text-sm font-mono"
+        />
+        <button className="btn !py-2 !px-3 text-xs" onClick={() => setShow((s) => !s)}>
+          {show ? "Hide" : "Show"}
+        </button>
+        <button className="btn btn-accent" onClick={apply} disabled={!draft.trim() || draft === liveKey}>
+          {active && draft === liveKey ? "✓ Active" : "Use live"}
+        </button>
+        {active && (
+          <button className="btn !py-2 !px-3 text-xs" onClick={clear}>
+            Clear
+          </button>
+        )}
+      </div>
+      <div className={`text-xs mt-2 ${active ? "text-bull" : "text-ink-dim"}`}>
+        {active ? "🟢 Live mode active — refresh pulls real-time Finnhub data." : "Using scheduled reports / sample data."}
+      </div>
+      <p className="text-[11px] text-ink-dim mt-2 leading-relaxed">
+        Stored only in this browser (localStorage) and sent directly to Finnhub. For the scheduled
+        cloud scans + notifications, set <code className="text-accent">FINNHUB_API_KEY</code> as a GitHub secret instead.
+      </p>
+    </Card>
+  );
+}
+
 export function DataSourcesCard() {
   const { meta } = useApp();
   return (
