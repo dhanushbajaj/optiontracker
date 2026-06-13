@@ -33,9 +33,11 @@ async function currentPrices(_tickers: string[]): Promise<Record<string, number>
 
 function dirPnL(direction: string, from: number, to: number): number {
   const move = ((to - from) / from) * 100;
-  // option P/L is leveraged ~5x the underlying move in the trade's direction
+  // Estimate option P/L as ~5x the underlying move in the trade's direction,
+  // then clamp to option reality: a long option can lose at most 100% of the
+  // premium, and we cap the upside estimate at +300%.
   const signed = direction === "bearish" ? -move : move;
-  return Math.round(signed * 5);
+  return Math.round(Math.max(-100, Math.min(300, signed * 5)));
 }
 
 async function main() {

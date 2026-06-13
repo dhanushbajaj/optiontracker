@@ -6,11 +6,12 @@ import { ReportView } from "./components/ReportView";
 import { TradeIdeaCard } from "./components/TradeIdeaCard";
 import { NotificationSetup, DataSourcesCard, LiveDataKeyCard } from "./components/NotificationSetup";
 import { ChartsView, DashboardCharts } from "./components/ChartsView";
+import { PerformanceView } from "./components/PerformanceView";
 import { Card } from "./components/ui";
 import { fmtDate, fmtTime } from "./lib/format";
 import type { AppAlert } from "./types";
 
-type View = "dashboard" | "report" | "charts" | "flow" | "earnings" | "watch" | "saved" | "journal" | "alerts";
+type View = "dashboard" | "report" | "charts" | "flow" | "earnings" | "watch" | "performance" | "saved" | "journal" | "alerts";
 
 const NAV: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "▦" },
@@ -19,6 +20,7 @@ const NAV: { id: View; label: string; icon: string }[] = [
   { id: "flow", label: "Options Flow", icon: "🌊" },
   { id: "earnings", label: "Earnings", icon: "📅" },
   { id: "watch", label: "Watchlists", icon: "👁" },
+  { id: "performance", label: "Performance", icon: "🏆" },
   { id: "saved", label: "Saved Ideas", icon: "★" },
   { id: "journal", label: "Journal", icon: "📓" },
   { id: "alerts", label: "Alerts & Setup", icon: "🔔" },
@@ -119,6 +121,7 @@ export default function App() {
               {view === "flow" && <OptionsFlowPanel snap={scan.snapshot} full />}
               {view === "earnings" && <EarningsPanel snap={scan.snapshot} />}
               {view === "watch" && <WatchlistView />}
+              {view === "performance" && <PerformanceView />}
               {view === "saved" && <SavedView />}
               {view === "journal" && <JournalView />}
               {view === "alerts" && <AlertsView alerts={alerts} />}
