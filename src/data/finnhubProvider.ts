@@ -51,30 +51,48 @@ interface FinnhubQuote {
 export class FinnhubProvider implements MarketDataProvider {
   readonly id = "finnhub";
   private gap: number;
+  private concurrency: number;
   private token: string;
 
-  // gapMs throttles requests (free tier ~30 req/s, 60/min). A key may be passed
-  // explicitly (browser / client-side live mode) or read from FINNHUB_API_KEY
-  // (Node / GitHub Action).
-  constructor(opts: { gapMs?: number; apiKey?: string } = {}) {
-    this.gap = opts.gapMs ?? 240;
+  // A scan is fetched with bounded concurrency (default 5) so it completes in
+  // a few seconds (fits serverless time limits) while staying under Finnhub's
+  // ~30 req/s burst and 60/min free limit. `gapMs` adds an optional per-call
+  // delay (0 by default). A key may be passed explicitly (browser / Vercel
+  // function) or read from FINNHUB_API_KEY (Node / GitHub Action).
+  constructor(opts: { gapMs?: number; apiKey?: string; concurrency?: number } = {}) {
+    this.gap = opts.gapMs ?? 0;
+    this.concurrency = opts.concurrency ?? 5;
     const k = opts.apiKey ?? envKey();
     if (!k) throw new Error("No Finnhub API key (pass apiKey or set FINNHUB_API_KEY)");
     this.token = k;
   }
 
   private async get<T>(path: string, attempt = 0): Promise<T> {
-    await sleep(this.gap);
+    if (this.gap > 0) await sleep(this.gap);
     const sep = path.includes("?") ? "&" : "?";
     const url = `${BASE}${path}${sep}token=${this.token}`;
     const res = await fetch(url);
     // Back off and retry on rate-limit (free tier is 60/min).
     if (res.status === 429 && attempt < 2) {
-      await sleep(2000);
+      await sleep(1500);
       return this.get<T>(path, attempt + 1);
     }
     if (!res.ok) throw new Error(`Finnhub ${res.status} for ${path}`);
     return (await res.json()) as T;
+  }
+
+  // Run `fn` over `items` with at most `concurrency` requests in flight.
+  private async pool<T, R>(items: T[], fn: (t: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let i = 0;
+    const workers = Array.from({ length: Math.min(this.concurrency, items.length) }, async () => {
+      while (i < items.length) {
+        const idx = i++;
+        results[idx] = await fn(items[idx]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
   }
 
   private async quote(symbol: string): Promise<FinnhubQuote | null> {
@@ -100,80 +118,62 @@ export class FinnhubProvider implements MarketDataProvider {
   async getSnapshot(session: "morning" | "evening"): Promise<MarketSnapshot> {
     const asOf = new Date().toISOString();
 
-    // --- Indices -----------------------------------------------------------
+    // Fetch the independent groups concurrently (each internally parallel).
+    const [indexQuotes, macroRaw, vixData, spyMetric, news] = await Promise.all([
+      this.pool(INDEX_SYMBOLS, (ix) => this.quote(ix.symbol)),
+      this.pool(MACRO_PROXIES, (m) => this.quote(m.symbol)),
+      this.fetchVix(),
+      this.metric("SPY"),
+      this.fetchNews(),
+    ]);
+
     const indices: IndexQuote[] = [];
-    for (const ix of INDEX_SYMBOLS) {
-      const q = await this.quote(ix.symbol);
-      if (q)
-        indices.push({
-          symbol: ix.symbol,
-          name: ix.name,
-          price: round(q.c),
-          changePct: round(q.dp),
-          futuresChangePct: session === "morning" ? round(q.dp) : undefined,
-        });
-    }
-    const spyMetric = await this.metric("SPY");
+    INDEX_SYMBOLS.forEach((ix, i) => {
+      const q = indexQuotes[i];
+      if (!q) return;
+      indices.push({
+        symbol: ix.symbol,
+        name: ix.name,
+        price: round(q.c),
+        changePct: round(q.dp),
+        futuresChangePct: session === "morning" ? round(q.dp) : undefined,
+      });
+    });
+
+    const macro: MacroQuote[] = [];
+    MACRO_PROXIES.forEach((m, i) => {
+      const q = macroRaw[i];
+      if (!q) return;
+      const chg = m.invert ? -q.dp : q.dp; // TLT up => yields down
+      macro.push({
+        symbol: m.display,
+        name: m.name,
+        value: round(q.c),
+        changePct: round(chg),
+        proxyOf: m.symbol,
+      });
+    });
+
+    const { vix, vixChangePct } = vixData;
     const spy13w = num(spyMetric["13WeekPriceReturnDaily"], 0);
 
-    // --- Macro proxies -----------------------------------------------------
-    const macro: MacroQuote[] = [];
-    for (const m of MACRO_PROXIES) {
-      const q = await this.quote(m.symbol);
-      if (q) {
-        const chg = m.invert ? -q.dp : q.dp; // TLT up => yields down
-        macro.push({
-          symbol: m.display,
-          name: m.name,
-          value: round(q.c),
-          changePct: round(chg),
-          proxyOf: m.symbol, // value is the ETF price, not the real index level
-        });
-      }
-    }
-
-    // --- VIX (proxy via VIXY direction; level best-effort) -----------------
-    let vix = 15;
-    let vixChangePct = 0;
-    const vixDirect = await this.quote("^VIX");
-    if (vixDirect) {
-      vix = round(vixDirect.c);
-      vixChangePct = round(vixDirect.dp);
-    } else {
-      const vixy = await this.quote("VIXY");
-      if (vixy) {
-        vixChangePct = round(vixy.dp);
-        vix = round(clamp(15 + vixy.dp * 0.5, 10, 45));
-      }
-    }
-
-    // Sector performance is derived from the universe constituents below
-    // (saves 7 calls to stay under the 60/min free-tier limit).
-    const sectorChg: Record<string, number> = {};
-
-    // --- Universe quotes + metrics -> Quote ---------------------------------
-    const quotes: Quote[] = [];
+    // --- Universe quotes + metrics -> Quote (bounded-concurrency pool) ------
+    const built = await this.pool(UNIVERSE, async (u) => {
+      const [q, m] = await Promise.all([this.quote(u.ticker), this.metric(u.ticker)]);
+      return q ? buildQuote(u, q, m, spy13w) : null;
+    });
+    const quotes: Quote[] = built.filter((x): x is Quote => x !== null);
     const optionChains: Record<string, OptionContract[]> = {};
-    for (const u of UNIVERSE) {
-      const q = await this.quote(u.ticker);
-      if (!q) continue;
-      const m = await this.metric(u.ticker);
-      const quote = buildQuote(u, q, m, spy13w);
-      quotes.push(quote);
-      optionChains[u.ticker] = synthesizeChain(quote);
-    }
+    for (const q of quotes) optionChains[q.ticker] = synthesizeChain(q);
 
-    // --- News (market + a few company headlines) ----------------------------
-    const news = await this.fetchNews();
+    // --- Earnings + analyst (depend on quotes; run together) ----------------
+    const [earnings, analyst] = await Promise.all([
+      this.fetchEarnings(quotes),
+      this.fetchAnalyst(quotes.slice(0, 6)),
+    ]);
 
-    // --- Earnings calendar (today .. +14d) ----------------------------------
-    const earnings = await this.fetchEarnings(quotes);
-
-    // --- Analyst recommendation trends -> actions ---------------------------
-    const analyst = await this.fetchAnalyst(quotes.slice(0, 6));
-
-    // --- Sectors -----------------------------------------------------------
-    const sectors = buildSectors(quotes, sectorChg);
+    // Sector performance is derived from the universe constituents.
+    const sectors = buildSectors(quotes, {});
 
     // --- Options flow (synthesized from price/vol) --------------------------
     const flow = synthesizeFlow(quotes, news);
@@ -213,28 +213,35 @@ export class FinnhubProvider implements MarketDataProvider {
     return synthesizeChain(buildQuote(u, q, m, 0));
   }
 
+  // VIX level/direction — ^VIX if available, else VIXY proxy for direction.
+  private async fetchVix(): Promise<{ vix: number; vixChangePct: number }> {
+    const direct = await this.quote("^VIX");
+    if (direct) return { vix: round(direct.c), vixChangePct: round(direct.dp) };
+    const vixy = await this.quote("VIXY");
+    if (vixy) return { vix: round(clamp(15 + vixy.dp * 0.5, 10, 45)), vixChangePct: round(vixy.dp) };
+    return { vix: 15, vixChangePct: 0 };
+  }
+
   // ------------------------------------------------------------------ news
   private async fetchNews(): Promise<NewsItem[]> {
     const out: NewsItem[] = [];
-    try {
-      const market = await this.get<RawNews[]>(`/news?category=general`);
-      for (const n of market.slice(0, 6)) out.push(toNewsItem(n));
-    } catch {
-      /* ignore */
-    }
-    // a few high-interest company headlines
     const from = isoDate(new Date(Date.now() - 2 * 86400000));
     const to = isoDate(new Date());
-    for (const t of ["NVDA", "TSLA", "AAPL"]) {
-      try {
-        const arr = await this.get<RawNews[]>(
-          `/company-news?symbol=${t}&from=${from}&to=${to}`
-        );
-        if (arr[0]) out.push(toNewsItem(arr[0], t));
-      } catch {
-        /* ignore */
-      }
-    }
+    const tickers = ["NVDA", "TSLA", "AAPL"];
+
+    const [market, ...companies] = await Promise.all([
+      this.get<RawNews[]>(`/news?category=general`).catch(() => [] as RawNews[]),
+      ...tickers.map((t) =>
+        this.get<RawNews[]>(`/company-news?symbol=${t}&from=${from}&to=${to}`).catch(
+          () => [] as RawNews[]
+        )
+      ),
+    ]);
+
+    for (const n of market.slice(0, 6)) out.push(toNewsItem(n));
+    companies.forEach((arr, i) => {
+      if (arr[0]) out.push(toNewsItem(arr[0], tickers[i]));
+    });
     return dedupeNews(out).slice(0, 12);
   }
 
@@ -280,29 +287,28 @@ export class FinnhubProvider implements MarketDataProvider {
 
   // --------------------------------------------------------------- analyst
   private async fetchAnalyst(quotes: Quote[]): Promise<AnalystAction[]> {
-    const out: AnalystAction[] = [];
-    for (const q of quotes) {
+    const results = await this.pool(quotes, async (q) => {
       try {
         const recs = await this.get<RawRec[]>(`/stock/recommendation?symbol=${q.ticker}`);
-        if (recs.length < 2) continue;
+        if (recs.length < 2) return null;
         const [cur, prev] = recs;
         const curBull = cur.strongBuy + cur.buy - cur.sell - cur.strongSell;
         const prevBull = prev.strongBuy + prev.buy - prev.sell - prev.strongSell;
         const delta = curBull - prevBull;
         const rating = curBull > 4 ? "Overweight" : curBull > 0 ? "Buy" : curBull > -3 ? "Hold" : "Underweight";
-        out.push({
+        return {
           id: `rec-${q.ticker}`,
           ticker: q.ticker,
           firm: "Street consensus",
-          action: delta > 1 ? "upgrade" : delta < -1 ? "downgrade" : "reiterate",
+          action: (delta > 1 ? "upgrade" : delta < -1 ? "downgrade" : "reiterate") as AnalystAction["action"],
           toRating: rating,
           time: new Date().toISOString(),
-        });
+        } as AnalystAction;
       } catch {
-        /* ignore */
+        return null;
       }
-    }
-    return out;
+    });
+    return results.filter((x): x is AnalystAction => x !== null);
   }
 }
 

@@ -20,7 +20,14 @@
       "Bash(node -e ' *)",
       "Bash(node -e \"const m=require\\('./public/data/latest-morning.json'\\); console.log\\('macro sample:', JSON.stringify\\(m.scan.snapshot.macro[0]\\)\\)\")",
       "Bash(VITE_BASE=\"/option-tracker/\" npm run build)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-tree *)",
+      "Bash(git rebase *)",
+      "Bash(git stash *)",
+      "Bash(git push *)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const b=JSON.parse\\(s\\);console.log\\(JSON.stringify\\(b.meta,null,1\\)\\)}catch\\(e\\){console.log\\('parse err'\\)}}\\)\")",
+      "Bash(node -e \"const b=require\\('./public/data/latest-morning.json'\\); console.log\\('mode:',b.meta.dataMode,'| quotes:',b.scan.snapshot.quotes.length,'/ 16 | indices:',b.scan.snapshot.indices.length,'| top:', b.scan.report.topIdea? b.scan.report.topIdea.ticker+' '+b.scan.report.topIdea.optionType:'none'\\)\")"
     ]
   }
 }

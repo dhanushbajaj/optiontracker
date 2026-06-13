@@ -1,4 +1,33 @@
-# 🚀 Deploy Option Oracle (free, phone-accessible)
+# 🚀 Deploy Option Oracle
+
+## Option A — Vercel (dynamic, recommended) ⚡
+
+A serverless function (`api/scan.ts`) fetches **live data on every visit**, server-side,
+with your key hidden — no twice-daily limit, no key in the browser. Results are cached ~5
+min so visitors share one fetch (well under Finnhub's 60/min).
+
+1. Push the repo to GitHub (see Option B step 1 if you haven't).
+2. Go to **https://vercel.com → Add New → Project → Import** your `optiontracker` repo.
+   Framework preset auto-detects **Vite** (build `npm run build`, output `dist`). Click Deploy.
+3. **Project → Settings → Environment Variables** → add `FINNHUB_API_KEY` = your key →
+   **Redeploy**. That's it — the site is live and dynamic at `https://<project>.vercel.app`,
+   works from your phone (installable PWA).
+
+The frontend calls `/api/scan` automatically; if it's ever unavailable it falls back to the
+committed reports, so nothing breaks. Test the endpoint directly at
+`https://<project>.vercel.app/api/scan?session=morning`.
+
+> **Notifications + history ledger:** the on-demand API doesn't write history or send alerts.
+> Keep the **GitHub Actions cron** (Option B) running in the same repo for the 9 AM / 9 PM
+> email/push notifications and the `history.json` performance ledger — it works alongside
+> Vercel. (Add the same secrets there.) Or wire Vercel Cron later.
+
+> Local dev with the function: `npm i -g vercel` then `vercel dev` (plain `npm run dev`
+> can't run serverless functions, so it uses the static-report fallback).
+
+---
+
+## Option B — GitHub Pages (static, free)
 
 This gets the app live on **GitHub Pages** with live Finnhub data, automatic
 **9 AM / 9 PM** scans, and **email + push** alerts to your phone — all on free tiers,

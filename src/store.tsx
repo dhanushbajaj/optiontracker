@@ -106,7 +106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // 0) If the user supplied a Finnhub key, run a real live scan in-browser.
       if (liveKey) {
         try {
-          const provider = new FinnhubProvider({ apiKey: liveKey, gapMs: 300 });
+          const provider = new FinnhubProvider({ apiKey: liveKey, concurrency: 4 });
           const snap = await provider.getSnapshot(session);
           // If we got starved by the rate limit, the snapshot will be sparse —
           // fall back to the last good report rather than render a broken one.
@@ -128,7 +128,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           console.warn("Live in-browser scan failed, falling back:", e);
         }
       }
-      // 1) Prefer the pre-generated report committed by the scheduled scan.
+      // 1) Dynamic endpoint (Vercel serverless) — live data, key hidden
+      //    server-side, cached ~5min. 404s on static hosts (GitHub Pages) and
+      //    falls through to the committed JSON below.
+      try {
+        const res = await fetch(`/api/scan?session=${session}`, { cache: "no-store" });
+        if (res.ok) {
+          const bundle = await res.json();
+          if (bundle?.scan?.report) {
+            setScan(bundle.scan as ScanResult);
+            setMeta(bundle.meta as ScanMeta);
+            setAlerts(buildAlerts(bundle.scan as ScanResult, session));
+            return;
+          }
+        }
+      } catch {
+        /* no serverless function here — fall through */
+      }
+      // 2) Pre-generated report committed by the scheduled scan (static hosts).
       try {
         const res = await fetch(`${import.meta.env.BASE_URL}data/latest-${session}.json`, {
           cache: "no-store",
@@ -145,7 +162,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* fall through to local mock */
       }
-      // 2) Local dev / no data yet: run the engines client-side on mock data.
+      // 3) Local dev / no data yet: run the engines client-side on mock data.
       const snap = await getProvider().getSnapshot(session);
       const result = runScan(snap, session);
       setScan(result);
