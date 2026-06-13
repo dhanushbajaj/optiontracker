@@ -4,6 +4,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/scan.ts": { "maxDuration": 30 }
-  }
+    "api/scan.ts": { "maxDuration": 30 },
+    "api/cron.ts": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron", "schedule": "0 13 * * *" },
+    { "path": "/api/cron", "schedule": "0 1 * * *" }
+  ]
 }

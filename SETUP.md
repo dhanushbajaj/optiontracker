@@ -17,12 +17,32 @@ The frontend calls `/api/scan` automatically; if it's ever unavailable it falls 
 committed reports, so nothing breaks. Test the endpoint directly at
 `https://<project>.vercel.app/api/scan?session=morning`.
 
-> **Notifications + history ledger:** the on-demand API doesn't write history or send alerts.
-> Keep the **GitHub Actions cron** (Option B) running in the same repo for the 9 AM / 9 PM
-> email/push notifications and the `history.json` performance ledger — it works alongside
-> Vercel. (Add the same secrets there.) Or wire Vercel Cron later.
+### Notifications on Vercel (Cron)
 
-> Local dev with the function: `npm i -g vercel` then `vercel dev` (plain `npm run dev`
+`api/cron.ts` runs the scan and sends **email + web push** on a schedule (configured in
+`vercel.json`): `0 13 * * *` (~9 AM ET) and `0 1 * * *` (~9 PM ET). To enable:
+
+Add these **Environment Variables** in your Vercel project (Settings → Environment Variables):
+
+| Variable | For |
+|---|---|
+| `FINNHUB_API_KEY` | live data (also powers `/api/scan`) |
+| `CRON_SECRET` | any random string — Vercel sends it as a bearer token so only the cron can hit `/api/cron` |
+| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` `EMAIL_TO` | email alerts |
+| `VAPID_PUBLIC` `VAPID_PRIVATE` `VAPID_SUBJECT` `PUSH_SUBSCRIPTIONS` | web push (same values as Option B step 5) |
+
+Redeploy. Test manually: `curl -H "Authorization: Bearer <CRON_SECRET>" https://<project>.vercel.app/api/cron`.
+
+> ⏰ **Vercel Hobby caveat:** the free plan runs cron jobs **once per day per job** (we use two
+> jobs — morning + evening, which fits) and timing can drift by up to an hour. For exact-to-the-
+> minute 9:00 triggers, the GitHub Actions cron (Option B) is more precise.
+>
+> 🔁 **Avoid duplicate alerts:** if you use Vercel Cron, remove/comment the **"Send notifications"**
+> step in `.github/workflows/scan.yml` (or disable that workflow). Keep the GitHub Actions cron only
+> if you still want it to persist the `history.json` performance ledger — the Vercel function can't
+> write to the repo. (A future option: move the ledger to Vercel KV.)
+
+> Local dev with the functions: `npm i -g vercel` then `vercel dev` (plain `npm run dev`
 > can't run serverless functions, so it uses the static-report fallback).
 
 ---
