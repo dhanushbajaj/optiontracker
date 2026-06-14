@@ -13,6 +13,7 @@
     "scan:morning": "tsx scripts/runScan.ts --session=morning",
     "scan:evening": "tsx scripts/runScan.ts --session=evening",
     "notify": "tsx scripts/notify.ts",
+    "watch": "tsx scripts/watchIntraday.ts",
     "track-outcomes": "tsx scripts/trackOutcomes.ts"
   },
   "dependencies": {

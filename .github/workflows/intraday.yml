@@ -1,0 +1,61 @@
+name: Intraday High-Conviction Watch
+
+# Scans every ~30 min during US market hours and pushes an alert only when a
+# NEW idea crosses the conviction threshold (deduped per ticker/day). The full
+# 9 AM / 9 PM reports are handled separately by scan.yml.
+#
+# Cron is UTC. 13:00–20:30 UTC ≈ 9:00 AM–4:30 PM ET (EDT); the script enforces
+# the precise 9:30–16:00 ET market window and weekday check, so off-window
+# firings simply no-op.
+
+on:
+  schedule:
+    - cron: "0,30 13-20 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run even if market is closed (test)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: intraday
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Watch for high-conviction setups
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          CONVICTION_THRESHOLD: ${{ vars.CONVICTION_THRESHOLD || '8' }}
+          FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+        run: npm run watch
+
+      - name: Persist dedup state
+        run: |
+          git config user.name "oracle-bot"
+          git config user.email "actions@github.com"
+          git add public/data/alerted.json 2>/dev/null || true
+          git diff --staged --quiet || (git commit -m "intraday: alert state $(date -u +%FT%TZ)" && git push)

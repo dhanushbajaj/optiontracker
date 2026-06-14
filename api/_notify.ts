@@ -83,7 +83,9 @@ export function renderText(s: NotifySummary): { subject: string; text: string; h
   return { subject, text, html };
 }
 
-export async function sendEmail(s: NotifySummary): Promise<string> {
+// ---- low-level dispatchers (shared by reports and intraday alerts) --------
+
+export async function dispatchEmail(subject: string, text: string, html: string): Promise<string> {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM, EMAIL_TO } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !EMAIL_TO) {
     return "email: not configured (skipped)";
@@ -95,12 +97,11 @@ export async function sendEmail(s: NotifySummary): Promise<string> {
     secure: port === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
-  const { subject, text, html } = renderText(s);
   await transport.sendMail({ from: EMAIL_FROM || SMTP_USER, to: EMAIL_TO, subject, text, html });
   return `email: sent to ${EMAIL_TO}`;
 }
 
-export async function sendPush(s: NotifySummary): Promise<string> {
+export async function dispatchPush(title: string, body: string, tag: string): Promise<string> {
   const { VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, PUSH_SUBSCRIPTIONS } = process.env;
   if (!VAPID_PUBLIC || !VAPID_PRIVATE || !PUSH_SUBSCRIPTIONS) {
     return "push: not configured (skipped)";
@@ -113,12 +114,7 @@ export async function sendPush(s: NotifySummary): Promise<string> {
     return "push: PUSH_SUBSCRIPTIONS not valid JSON (skipped)";
   }
   const list = Array.isArray(subs) ? subs : [subs];
-  const { subject } = renderText(s);
-  const payload = JSON.stringify({
-    title: subject,
-    body: s.topIdea ? `${s.topIdea.contract} — entry ${s.topIdea.entry}` : s.headline,
-    tag: s.session,
-  });
+  const payload = JSON.stringify({ title, body, tag });
   let ok = 0;
   for (const sub of list) {
     try {
@@ -131,7 +127,62 @@ export async function sendPush(s: NotifySummary): Promise<string> {
   return `push: sent to ${ok}/${list.length} device(s)`;
 }
 
+// ---- the twice-daily report ------------------------------------------------
+
 export async function sendNotifications(s: NotifySummary): Promise<string[]> {
-  const results = await Promise.allSettled([sendEmail(s), sendPush(s)]);
+  const { subject, text, html } = renderText(s);
+  const body = s.topIdea ? `${s.topIdea.contract} — entry ${s.topIdea.entry}` : s.headline;
+  const results = await Promise.allSettled([
+    dispatchEmail(subject, text, html),
+    dispatchPush(subject, body, s.session),
+  ]);
+  return results.map((r) => (r.status === "fulfilled" ? r.value : `error: ${r.reason}`));
+}
+
+// ---- intraday high-conviction alert ---------------------------------------
+
+export interface IdeaAlert {
+  ticker: string;
+  optionType: string;
+  direction: string;
+  contract: string;
+  conviction: number;
+  riskLevel: string;
+  entry: string;
+  target: string;
+  stop: string;
+  invalidation: string;
+  dataMode: string;
+}
+
+export async function sendIdeaAlert(a: IdeaAlert): Promise<string[]> {
+  const subject = `⚡ High-conviction setup: ${a.ticker} ${a.optionType.toUpperCase()} (${a.conviction}/10)`;
+  const body = `${a.contract} · entry ${a.entry} · target ${a.target} · stop ${a.stop}`;
+  const text = [
+    subject,
+    "",
+    `Direction: ${a.direction} ${a.optionType.toUpperCase()}  ·  Risk: ${a.riskLevel}`,
+    `Entry ${a.entry}   Target ${a.target}   Stop ${a.stop}`,
+    `Invalidation: ${a.invalidation}`,
+    "",
+    `Data mode: ${a.dataMode}`,
+    "",
+    "⚠ Educational analysis only — not financial advice. Options can lose 100% of premium.",
+  ].join("\n");
+  const html = `
+  <div style="font-family:system-ui,Segoe UI,sans-serif;background:#0a0e14;color:#e6edf3;padding:24px;border-radius:16px;max-width:560px">
+    <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#38bdf8">⚡ Intraday high-conviction setup</div>
+    <div style="font-size:20px;font-weight:700;margin:6px 0">${a.contract} <span style="color:#9bb0c4;font-size:14px">(${a.conviction}/10)</span></div>
+    <div style="color:#9bb0c4">${a.direction} ${a.optionType.toUpperCase()} · ${a.riskLevel} risk</div>
+    <div style="background:#121a26;border:1px solid #1f2c3d;border-radius:12px;padding:12px;margin-top:10px">
+      Entry <b>${a.entry}</b> · Target <b>${a.target}</b> · Stop <b>${a.stop}</b>
+    </div>
+    <div style="margin-top:8px;color:#f59e0b;font-size:13px">Invalidation: ${a.invalidation}</div>
+    <p style="color:#5f7185;font-size:12px;margin-top:16px">Data mode: ${a.dataMode} · Educational analysis only — not financial advice. Options can lose 100% of premium.</p>
+  </div>`;
+  const results = await Promise.allSettled([
+    dispatchEmail(subject, text, html),
+    dispatchPush(subject, body, `intraday-${a.ticker}`),
+  ]);
   return results.map((r) => (r.status === "fulfilled" ? r.value : `error: ${r.reason}`));
 }

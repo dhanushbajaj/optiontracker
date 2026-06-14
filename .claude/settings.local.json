@@ -27,7 +27,11 @@
       "Bash(git stash *)",
       "Bash(git push *)",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const b=JSON.parse\\(s\\);console.log\\(JSON.stringify\\(b.meta,null,1\\)\\)}catch\\(e\\){console.log\\('parse err'\\)}}\\)\")",
-      "Bash(node -e \"const b=require\\('./public/data/latest-morning.json'\\); console.log\\('mode:',b.meta.dataMode,'| quotes:',b.scan.snapshot.quotes.length,'/ 16 | indices:',b.scan.snapshot.indices.length,'| top:', b.scan.report.topIdea? b.scan.report.topIdea.ticker+' '+b.scan.report.topIdea.optionType:'none'\\)\")"
+      "Bash(node -e \"const b=require\\('./public/data/latest-morning.json'\\); console.log\\('mode:',b.meta.dataMode,'| quotes:',b.scan.snapshot.quotes.length,'/ 16 | indices:',b.scan.snapshot.indices.length,'| top:', b.scan.report.topIdea? b.scan.report.topIdea.ticker+' '+b.scan.report.topIdea.optionType:'none'\\)\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(24\\).toString\\('hex'\\)\\)\")",
+      "Bash(node -e \"const w=require\\('web-push'\\); const k=w.generateVAPIDKeys\\(\\); console.log\\('VAPID_PUBLIC =', k.publicKey\\); console.log\\('VAPID_PRIVATE =', k.privateKey\\)\")",
+      "Bash(FORCE=1 CONVICTION_THRESHOLD=6 npx tsx scripts/watchIntraday.ts)",
+      "Bash(CONVICTION_THRESHOLD=6 npx tsx scripts/watchIntraday.ts)"
     ]
   }
 }

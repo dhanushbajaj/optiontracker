@@ -47,6 +47,36 @@ Redeploy. Test manually: `curl -H "Authorization: Bearer <CRON_SECRET>" https://
 
 ---
 
+## Intraday high-conviction alerts (GitHub Actions only)
+
+Beyond the twice-daily reports, `.github/workflows/intraday.yml` scans **every 30 min during
+market hours (9:30 AM–4:00 PM ET, weekdays)** and pushes an alert **only when a *new* idea
+crosses the conviction threshold** — deduped to one ping per ticker/direction per day
+(`public/data/alerted.json`, reset daily). Quiet days send nothing.
+
+> ⚠️ This **must** run on **GitHub Actions** — Vercel's free cron is once-per-day and can't do
+> sub-daily schedules.
+
+To enable: add the same secrets you use for notifications as **GitHub repo Secrets**
+(Settings → Secrets and variables → Actions): `FINNHUB_API_KEY`, `SMTP_*`, `EMAIL_*`,
+`VAPID_*`, `PUSH_SUBSCRIPTIONS`. Optionally add a repo **Variable** `CONVICTION_THRESHOLD`
+(default `8`; lower = more alerts). Test it now with **Actions → Intraday High-Conviction Watch
+→ Run workflow → force: true**.
+
+### Recommended setup (avoid duplicate alerts)
+Because intraday already requires GitHub Actions, the cleanest split is:
+- **Vercel** → hosts the dynamic site (`/api/scan`).
+- **GitHub Actions** → all scheduled jobs: `scan.yml` (9 AM/9 PM reports + history ledger) and
+  `intraday.yml` (intraday alerts).
+- **Don't also enable Vercel Cron** (`api/cron.ts`) — it would double up the 9 AM/9 PM alerts
+  with `scan.yml`. Pick one for the twice-daily report; GitHub Actions is simplest since it's
+  already running for intraday + the ledger.
+
+(If you'd rather go Vercel-only for the reports, keep the Vercel cron and disable the
+"Send notifications" step in `scan.yml` — but you'd still need GitHub Actions for intraday.)
+
+---
+
 ## Option B — GitHub Pages (static, free)
 
 This gets the app live on **GitHub Pages** with live Finnhub data, automatic
